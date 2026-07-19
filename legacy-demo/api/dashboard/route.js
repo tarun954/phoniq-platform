@@ -1,0 +1,78 @@
+import { google } from "googleapis";
+import path from "path";
+
+const SHEET_ID = "1VaO0aiZypUmKHFjt1NUUp186cnwmKv1B9ymXnqgV9ss";
+const TAB_NAME = "Demo Leads";
+
+export async function GET() {
+  try {
+    const credentialsPath = path.join(
+      process.cwd(),
+      "credentials",
+      "evocative-hour-499900-b5-f32fb688f1d4.json"
+    );
+
+    const auth = new google.auth.GoogleAuth({
+      keyFile: credentialsPath,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
+    });
+
+    const sheets = google.sheets({ version: "v4", auth });
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${TAB_NAME}!A:J`,
+    });
+
+    const rows = response.data.values || [];
+    const dataRows = rows.slice(1);
+
+    const leads = dataRows.map((row) => ({
+      leadId: row[0] || "",
+      date: row[1] || "",
+      name: row[2] || "",
+      phone: row[3] || "",
+      language: row[4] || "",
+      serviceIssue: row[5] || "",
+      preferredTime: row[6] || "",
+      city: row[7] || "",
+      status: row[8] || "",
+      notes: row[9] || "",
+    }));
+
+    const totalLeads = leads.length;
+    const hotLeads = leads.filter((l) =>
+      l.notes.toLowerCase().includes("hot")
+    ).length;
+
+    const appointments = leads.filter((l) =>
+      l.status.toLowerCase().includes("appointment")
+    ).length;
+
+    const missedCalls = leads.filter((l) =>
+      l.status.toLowerCase().includes("missed")
+    ).length;
+
+    return Response.json({
+      success: true,
+      metrics: {
+        totalLeads,
+        hotLeads,
+        appointments,
+        missedCalls,
+        estimatedRevenue: totalLeads * 1200,
+      },
+      leads: leads.reverse(),
+    });
+  } catch (error) {
+    console.error("Dashboard API Error:", error);
+
+    return Response.json(
+      {
+        success: false,
+        error: error.message,
+      },
+      { status: 500 }
+    );
+  }
+}
