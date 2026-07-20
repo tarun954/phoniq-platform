@@ -89,7 +89,18 @@ export async function POST(request) {
     }
 
     const rawBody = await request.json();
-    const parsed = LeadSchema.safeParse(rawBody);
+
+const callControlIdFromHeader = request.headers.get(
+  "x-telnyx-call-control-id"
+);
+
+const parsed = LeadSchema.safeParse({
+  ...rawBody,
+  telnyxCallId:
+    rawBody.telnyxCallId ||
+    callControlIdFromHeader ||
+    undefined,
+});
 
     if (!parsed.success) {
       return NextResponse.json(
