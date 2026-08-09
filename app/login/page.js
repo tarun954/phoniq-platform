@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
-
+import Link from "next/link";
 export default function LoginPage() {
   return (
     <Suspense fallback={<LoginLoading />}>
@@ -102,6 +102,14 @@ function LoginForm() {
               }))
             }
           />
+          <div className="flex justify-end">
+  <Link
+    href="/forgot-password"
+    className="text-sm text-blue-300 hover:text-blue-200"
+  >
+    Forgot password?
+  </Link>
+</div>
 
           <button
             disabled={loading}
@@ -109,6 +117,7 @@ function LoginForm() {
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>
+          
         </form>
 
         {message && (
