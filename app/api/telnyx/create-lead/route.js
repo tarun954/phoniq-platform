@@ -61,8 +61,8 @@ const LeadSchema = z.object({
     .string()
     .trim()
     .max(100)
-    .optional()
-    .default(""),
+    .nullish()
+    .transform((value) => value ?? ""),
 
   serviceIssue: z
     .string()
@@ -76,42 +76,44 @@ const LeadSchema = z.object({
     .string()
     .trim()
     .max(100)
-    .optional()
-    .default(""),
+    .nullish()
+    .transform((value) => value ?? ""),
 
   preferredTime: z
     .string()
     .trim()
     .max(100)
-    .optional()
-    .default(""),
+    .nullish()
+    .transform((value) => value ?? ""),
 
   callSummary: z
     .string()
     .trim()
     .max(5000)
-    .optional()
-    .default(""),
+    .nullish()
+    .transform((value) => value ?? ""),
 
   telnyxCallId: z
     .string()
     .trim()
     .max(255)
-    .optional(),
+    .nullish()
+    .transform((value) => value || undefined),
 
   telnyxConversationId: z
     .string()
     .trim()
     .max(255)
-    .optional(),
+    .nullish()
+    .transform((value) => value || undefined),
 
   assistantId: z
     .string()
     .trim()
     .max(255)
-    .optional(),
+    .nullish()
+    .transform((value) => value || undefined),
 });
-
 /*
  * Normalize US phone numbers.
  *
