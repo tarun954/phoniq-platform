@@ -1,164 +1,83 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense,useState } from "react";
 import Link from "next/link";
+import { useRouter,useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<LoginLoading />}>
-      <LoginForm />
-    </Suspense>
-  );
-}
+function ClientLoginForm(){
+  const router=useRouter();
+  const searchParams=useSearchParams();
+  const next=searchParams.get("next")||"/dashboard";
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [error,setError]=useState("");
+  const [working,setWorking]=useState(false);
 
-function LoginForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  async function submit(event){
+    event.preventDefault();setWorking(true);setError("");
+    const supabase=createClient();
 
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-  });
+    try{
+      const {error:signInError}=await supabase.auth.signInWithPassword({
+        email:email.trim().toLowerCase(),password
+      });
+      if(signInError)throw signInError;
 
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-
-  async function handleSubmit(event) {
-    event.preventDefault();
-    setLoading(true);
-    setMessage("");
-
-    try {
-      const supabase = createClient();
-
-      const { error } =
-        await supabase.auth.signInWithPassword({
-          email: form.email.trim(),
-          password: form.password,
-        });
-
-      if (error) {
-        throw error;
+      const membership=await fetch("/api/navigation-permissions",{cache:"no-store"});
+      if(!membership.ok){
+        await supabase.auth.signOut();
+        throw new Error("This account is not connected to a client company.");
       }
 
-      const nextPath = searchParams.get("next");
-      const safePath =
-        nextPath?.startsWith("/") &&
-        !nextPath.startsWith("//")
-          ? nextPath
-          : "/dashboard";
+      await fetch("/api/auth/portal-mode",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({mode:"client"})
+      });
 
-      router.push(safePath);
+      router.replace(next.startsWith("/admin")?"/dashboard":next);
       router.refresh();
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to sign in."
-      );
-    } finally {
-      setLoading(false);
-    }
+    }catch(err){
+      setError(err?.message||"Unable to sign in.");
+    }finally{setWorking(false);}
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
-      <div className="mx-auto max-w-md rounded-3xl border border-white/10 bg-white/5 p-8">
-        <Link href="/" className="text-sm font-semibold text-blue-300">
-          PHONIQ
-        </Link>
-
-        <h1 className="mt-3 text-3xl font-bold">
-          Sign in to your workspace
-        </h1>
-
-        <p className="mt-2 text-sm text-slate-400">
-          Access your calls, leads, and appointment requests.
-        </p>
-
-        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-          <Field
-            label="Email"
-            type="email"
-            value={form.email}
-            onChange={(value) =>
-              setForm((current) => ({
-                ...current,
-                email: value,
-              }))
-            }
-          />
-
-          <Field
-            label="Password"
-            type="password"
-            value={form.password}
-            onChange={(value) =>
-              setForm((current) => ({
-                ...current,
-                password: value,
-              }))
-            }
-          />
-          <div className="flex justify-end">
-  <Link
-    href="/forgot-password"
-    className="text-sm text-blue-300 hover:text-blue-200"
-  >
-    Forgot password?
-  </Link>
-</div>
-
-          <button
-            disabled={loading}
-            className="w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold hover:bg-blue-700 disabled:opacity-60"
-          >
-            {loading ? "Signing in..." : "Sign in"}
-          </button>
-          
+    <main style={page}>
+      <section style={card}>
+        <div style={{display:"flex",gap:12,alignItems:"center"}}>
+          <div style={logo}>P</div>
+          <div><strong style={{fontSize:18}}>PHONIQ</strong><small style={small}>CLIENT CRM</small></div>
+        </div>
+        <p style={eyebrow}>CLIENT SIGN IN</p>
+        <h1 style={{fontSize:34,margin:"6px 0"}}>Welcome back</h1>
+        <p style={{color:"#64748b"}}>Sign in to your company workspace.</p>
+        {error&&<div style={errBox}>{error}</div>}
+        <form onSubmit={submit}>
+          <label style={label}>Email</label>
+          <input style={input} type="email" required value={email} onChange={e=>setEmail(e.target.value)}/>
+          <label style={label}>Password</label>
+          <input style={input} type="password" required value={password} onChange={e=>setPassword(e.target.value)}/>
+          <button style={button} disabled={working}>{working?"Signing in...":"Sign In to Client CRM"}</button>
         </form>
-
-        {message && (
-          <p className="mt-5 rounded-xl bg-red-500/10 p-4 text-sm text-red-200">
-            {message}
-          </p>
-        )}
-
-        <p className="mt-6 text-center text-sm text-slate-400">
-          Need a workspace?{" "}
-          <Link href="/signup" className="text-blue-300 hover:text-blue-200">
-            Create an account
-          </Link>
+        <p style={{marginTop:18,color:"#64748b",fontSize:13}}>
+          Phoniq employee? <Link href="/admin-login">Use Admin Console login</Link>
         </p>
-      </div>
+      </section>
     </main>
   );
 }
 
-function Field({ label, type, value, onChange }) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-sm text-slate-300">
-        {label}
-      </span>
-
-      <input
-        required
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 outline-none focus:border-blue-500"
-      />
-    </label>
-  );
+export default function LoginPage(){
+  return <Suspense fallback={<main style={page}>Loading...</main>}><ClientLoginForm/></Suspense>;
 }
 
-function LoginLoading() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
-      Loading…
-    </main>
-  );
-}
+const page={minHeight:"100vh",display:"grid",placeItems:"center",background:"#f6f8fc",padding:24,fontFamily:"var(--font-geist-sans),Arial,sans-serif"};
+const card={width:"min(460px,100%)",background:"#fff",border:"1px solid #dce4ef",borderRadius:20,padding:30,boxShadow:"0 24px 70px rgba(15,23,42,.08)"};
+const logo={width:44,height:44,borderRadius:12,display:"grid",placeItems:"center",background:"#2563eb",color:"#fff",fontWeight:900};
+const small={display:"block",color:"#94a3b8",fontSize:9,letterSpacing:1.6,marginTop:3};
+const eyebrow={color:"#2563eb",fontSize:11,fontWeight:900,letterSpacing:1.5,margin:"28px 0 0"};
+const label={display:"block",fontWeight:800,margin:"14px 0 6px"};const input={width:"100%",boxSizing:"border-box",padding:12,border:"1.5px solid #0f172a",borderRadius:9};
+const button={width:"100%",marginTop:20,padding:12,border:"1.5px solid #0f172a",borderRadius:9,background:"#2563eb",color:"#fff",fontWeight:850};
+const errBox={marginTop:15,padding:11,border:"1px solid #fecaca",background:"#fff1f2",color:"#b42318",borderRadius:9};
