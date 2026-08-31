@@ -1,298 +1,372 @@
-import { redirect } from "next/navigation";
+"use client";
+
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import LogoutButton from "@/components/logout-button";
+import { useEffect, useMemo, useState } from "react";
+import CRMPageShell from "@/components/crm/CRMPageShell";
 
-export default async function DashboardPage() {
-  const supabase = await createClient();
+function IconBase({ children, size = 25 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+function LeadsIcon() {
+  return (
+    <IconBase>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </IconBase>
+  );
+}
 
-  if (userError || !user) {
-    redirect("/login");
+function FlameIcon() {
+  return (
+    <IconBase>
+      <path d="M12 2s.5 4-2.5 7C7 11.5 7 14 8.5 16c-3-.5-5-3-5-6.5C3.5 5 7 2 7 2s-.5 4 2 5c1.5-2 3-5 3-5Z" />
+      <path d="M12 22c4 0 7-2.7 7-6.5 0-2.6-1.4-4.8-3.5-6.5.2 3-1.3 5-3 6.3-1.4 1.1-2.3 2.2-2.3 3.7 0 1.2.7 2.3 1.8 3Z" />
+    </IconBase>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <IconBase>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4M8 3v4M3 11h18" />
+      <path d="m9 16 2 2 4-4" />
+    </IconBase>
+  );
+}
+
+function ResolvedIcon() {
+  return (
+    <IconBase>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12 2.6 2.6L16.5 9" />
+    </IconBase>
+  );
+}
+
+function ArrowIcon() {
+  return (
+    <IconBase size={16}>
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </IconBase>
+  );
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function normalizeStatus(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function normalizePriority(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+export default function DashboardPage() {
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadLeads() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch("/api/leads", {
+        method: "GET",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+
+      const text = await response.text();
+      let result = {};
+
+      if (text) {
+        try {
+          result = JSON.parse(text);
+        } catch {
+          throw new Error(
+            `The leads API returned an invalid response (${response.status}).`
+          );
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || `Unable to load leads (${response.status}).`
+        );
+      }
+
+      setLeads(Array.isArray(result.leads) ? result.leads : []);
+    } catch (error) {
+      console.error("Dashboard lead load error:", error);
+      setError(error?.message || "Unable to load dashboard information.");
+      setLeads([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const { data: membership, error: membershipError } =
-    await supabase
-      .from("organization_members")
-      .select(`
-        role,
-        organization_id,
-        organizations (
-          id,
-          name,
-          industry,
-          plan,
-          status
-        )
-      `)
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle();
+  useEffect(() => {
+    loadLeads();
+  }, []);
 
-  if (membershipError) {
-    console.error("Membership lookup failed:", membershipError);
-  }
+  const metrics = useMemo(() => {
+    const resolvedStatuses = new Set([
+      "resolved",
+      "completed",
+      "closed",
+      "service_done",
+    ]);
 
-  if (!membership) {
-    redirect("/onboarding");
-  }
+    const appointmentStatuses = new Set([
+      "appointment_requested",
+      "appointment_scheduled",
+      "scheduled",
+      "booked",
+    ]);
 
-  const organization = membership.organizations;
-  const organizationId = membership.organization_id;
+    const active = leads.filter((lead) => {
+      const status = normalizeStatus(lead.status);
+      return !resolvedStatuses.has(status) && !lead.deleted_at;
+    });
 
-  const [
-    leadsResult,
-    appointmentsResult,
-    callsResult,
-    customersResult,
-  ] = await Promise.all([
-    supabase
-      .from("leads")
-      .select(
-        `
-          id,
-          service_issue,
-          emergency,
-          priority,
-          status,
-          preferred_time,
-          created_at,
-          customers (
-            full_name,
-            phone,
-            city,
-            service_address
-          )
-        `
-      )
-      .eq("organization_id", organizationId)
-      .order("created_at", { ascending: false })
-      .limit(20),
+    const hot = active.filter((lead) => {
+      const priority = normalizePriority(lead.priority);
+      return priority === "hot" || priority === "critical";
+    });
 
-    supabase
-      .from("appointments")
-      .select("*", { count: "exact", head: true })
-      .eq("organization_id", organizationId),
+    const appointments = leads.filter((lead) => {
+      const status = normalizeStatus(lead.status);
+      return (
+        appointmentStatuses.has(status) ||
+        Boolean(lead.preferred_time) ||
+        Boolean(lead.appointment_id)
+      );
+    });
 
-    supabase
-      .from("calls")
-      .select("*", { count: "exact", head: true })
-      .eq("organization_id", organizationId),
+    const resolved = leads.filter((lead) =>
+      resolvedStatuses.has(normalizeStatus(lead.status))
+    );
 
-    supabase
-      .from("customers")
-      .select("*", { count: "exact", head: true })
-      .eq("organization_id", organizationId),
-  ]);
+    return {
+      active: active.length,
+      hot: hot.length,
+      appointments: appointments.length,
+      resolved: resolved.length,
+    };
+  }, [leads]);
 
-  const leads = leadsResult.data ?? [];
+  const recentLeads = useMemo(
+    () => leads.filter((lead) => !lead.deleted_at).slice(0, 5),
+    [leads]
+  );
+
+  const cards = [
+    {
+      label: "Active Leads",
+      value: metrics.active,
+      description: "All current opportunities",
+      href: "/leads",
+      icon: <LeadsIcon />,
+      iconClass: "dashboard-stat-icon-blue",
+    },
+    {
+      label: "Hot Leads",
+      value: metrics.hot,
+      description: "Needs quick attention",
+      href: "/hot-leads",
+      icon: <FlameIcon />,
+      iconClass: "dashboard-stat-icon-orange",
+    },
+    {
+      label: "Appointments",
+      value: metrics.appointments,
+      description: "Requested or scheduled",
+      href: "/appointments",
+      icon: <CalendarIcon />,
+      iconClass: "dashboard-stat-icon-purple",
+    },
+    {
+      label: "Resolved",
+      value: metrics.resolved,
+      description: "Completed service requests",
+      href: "/resolved",
+      icon: <ResolvedIcon />,
+      iconClass: "dashboard-stat-icon-green",
+    },
+  ];
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-white/10">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
+    <CRMPageShell>
+      <section className="dashboard-page">
+        <div className="dashboard-heading-row">
           <div>
-            <Link href="/" className="text-xl font-bold">
-              PHONIQ
-            </Link>
-
-            <p className="mt-1 text-sm text-slate-400">
-              {organization?.name ?? "Company workspace"}
+            <div className="dashboard-eyebrow">Workspace Overview</div>
+            <h1 className="dashboard-title">{getGreeting()}</h1>
+            <p className="dashboard-subtitle">
+              Track new opportunities, urgent requests and service progress from
+              one place.
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium">
-                {user.email}
-              </p>
-              <p className="text-xs capitalize text-slate-500">
-                {membership.role}
-              </p>
-            </div>
-
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-7xl px-6 py-10">
-        <div>
-          <p className="text-sm font-medium text-blue-300">
-            COMPANY OVERVIEW
-          </p>
-
-          <h1 className="mt-2 text-3xl font-bold">
-            Operations dashboard
-          </h1>
-
-          <p className="mt-2 text-slate-400">
-            Review leads, calls, customers, and appointment requests.
-          </p>
+          <Link href="/leads" className="dashboard-view-all-button">
+            <span>View all leads</span>
+            <ArrowIcon />
+          </Link>
         </div>
 
-        <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            label="Recent leads"
-            value={leads.length}
-            detail="Latest 20 records"
-          />
-
-          <MetricCard
-            label="Appointments"
-            value={appointmentsResult.count ?? 0}
-            detail="All appointment requests"
-          />
-
-          <MetricCard
-            label="Calls"
-            value={callsResult.count ?? 0}
-            detail="Recorded call events"
-          />
-
-          <MetricCard
-            label="Customers"
-            value={customersResult.count ?? 0}
-            detail="Unique customer records"
-          />
-        </section>
-
-        <section className="mt-10 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-          <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+        {error && (
+          <div className="dashboard-error">
             <div>
-              <h2 className="text-xl font-semibold">
-                Recent leads
-              </h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Leads created by phone, website, or staff.
-              </p>
+              <strong>Unable to refresh dashboard</strong>
+              <p>{error}</p>
             </div>
+            <button onClick={loadLeads}>Try again</button>
           </div>
+        )}
 
-          {leadsResult.error ? (
-            <div className="p-6 text-red-300">
-              Unable to load leads: {leadsResult.error.message}
+        <div className="dashboard-stat-grid">
+          {cards.map((card) => (
+            <Link href={card.href} key={card.label} className="dashboard-stat-card">
+              <div className="dashboard-stat-card-top">
+                <div>
+                  <div className="dashboard-stat-label">{card.label}</div>
+                  <div className="dashboard-stat-value">
+                    {loading ? "—" : card.value}
+                  </div>
+                </div>
+
+                <div
+                  className={`dashboard-stat-icon ${card.iconClass}`}
+                  aria-hidden="true"
+                >
+                  {card.icon}
+                </div>
+              </div>
+
+              <div className="dashboard-stat-description">
+                {card.description}
+              </div>
+            </Link>
+          ))}
+        </div>
+
+        <div className="dashboard-content-grid">
+          <section className="dashboard-panel">
+            <div className="dashboard-panel-heading">
+              <div>
+                <h2>Recent leads</h2>
+                <p>Latest customer requests entering your workspace.</p>
+              </div>
+              <Link href="/leads">View all</Link>
             </div>
-          ) : leads.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-white/10">
-                <thead className="bg-white/[0.03]">
-                  <tr>
-                    <TableHeading>Customer</TableHeading>
-                    <TableHeading>Issue</TableHeading>
-                    <TableHeading>Priority</TableHeading>
-                    <TableHeading>Status</TableHeading>
-                    <TableHeading>Requested time</TableHeading>
-                  </tr>
-                </thead>
 
-                <tbody className="divide-y divide-white/10">
-                  {leads.map((lead) => {
-                    const customer = Array.isArray(lead.customers)
-                      ? lead.customers[0]
-                      : lead.customers;
+            {loading ? (
+              <div className="dashboard-empty-state">Loading recent leads...</div>
+            ) : recentLeads.length === 0 ? (
+              <div className="dashboard-empty-state">
+                <strong>No leads yet</strong>
+                <span>
+                  New phone and website leads will appear here automatically.
+                </span>
+              </div>
+            ) : (
+              <div className="dashboard-recent-list">
+                {recentLeads.map((lead) => {
+                  const customer = lead.customer || {};
+                  const priority = normalizePriority(lead.priority);
+                  const status = normalizeStatus(lead.status);
 
-                    return (
-                      <tr key={lead.id} className="hover:bg-white/[0.03]">
-                        <TableCell>
-                          <p className="font-medium">
-                            {customer?.full_name || "Unknown customer"}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {customer?.phone || "No phone"}
-                          </p>
-                        </TableCell>
+                  return (
+                    <Link
+                      href={`/leads/${lead.id}`}
+                      key={lead.id}
+                      className="dashboard-recent-row"
+                    >
+                      <div className="dashboard-avatar">
+                        {(customer.full_name || "C").charAt(0).toUpperCase()}
+                      </div>
 
-                        <TableCell>
-                          <p className="max-w-xs">
-                            {lead.service_issue}
-                          </p>
-                        </TableCell>
+                      <div className="dashboard-recent-main">
+                        <div className="dashboard-recent-name">
+                          {customer.full_name || "Customer"}
+                        </div>
+                        <div className="dashboard-recent-issue">
+                          {lead.service_issue || "Service request"}
+                        </div>
+                      </div>
 
-                        <TableCell>
-                          <StatusBadge value={lead.priority} />
-                        </TableCell>
+                      <div className="dashboard-recent-meta">
+                        <span
+                          className={`dashboard-priority-badge dashboard-priority-${priority || "normal"}`}
+                        >
+                          {priority || "normal"}
+                        </span>
 
-                        <TableCell>
-                          <StatusBadge value={lead.status} />
-                        </TableCell>
+                        <span className="dashboard-status-text">
+                          {status.replaceAll("_", " ") || "new"}
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
-                        <TableCell>
-                          {lead.preferred_time || "Not provided"}
-                        </TableCell>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <section className="dashboard-panel dashboard-priority-panel">
+            <div className="dashboard-panel-heading">
+              <div>
+                <h2>Priority queue</h2>
+                <p>Requests that may need faster follow-up.</p>
+              </div>
             </div>
-          )}
-        </section>
-      </div>
-    </main>
-  );
-}
 
-function MetricCard({ label, value, detail }) {
-  return (
-    <article className="rounded-2xl border border-white/10 bg-white/5 p-5">
-      <p className="text-sm text-slate-400">{label}</p>
-      <p className="mt-3 text-3xl font-bold">{value}</p>
-      <p className="mt-2 text-xs text-slate-500">{detail}</p>
-    </article>
-  );
-}
+            <div className="dashboard-priority-summary">
+              <div className="dashboard-priority-circle">
+                <FlameIcon />
+              </div>
+              <div>
+                <div className="dashboard-priority-count">
+                  {loading ? "—" : metrics.hot}
+                </div>
+                <div className="dashboard-priority-caption">
+                  hot or critical leads
+                </div>
+              </div>
+            </div>
 
-function EmptyState() {
-  return (
-    <div className="px-6 py-16 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-2xl">
-        ☎
-      </div>
-
-      <h3 className="mt-5 text-lg font-semibold">
-        No Phoniq leads yet
-      </h3>
-
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-400">
-        Once the Telnyx assistant calls the Phoniq lead tool,
-        customer information will appear here.
-      </p>
-    </div>
-  );
-}
-
-function TableHeading({ children }) {
-  return (
-    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-      {children}
-    </th>
-  );
-}
-
-function TableCell({ children }) {
-  return (
-    <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-300">
-      {children}
-    </td>
-  );
-}
-
-function StatusBadge({ value }) {
-  const formatted = String(value || "unknown")
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-
-  return (
-    <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-medium">
-      {formatted}
-    </span>
+            <Link href="/hot-leads" className="dashboard-secondary-action">
+              Open hot leads
+              <ArrowIcon />
+            </Link>
+          </section>
+        </div>
+      </section>
+    </CRMPageShell>
   );
 }

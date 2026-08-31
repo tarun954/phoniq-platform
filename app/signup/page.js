@@ -1,157 +1,183 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 
 export default function SignupPage() {
   const router = useRouter();
-
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     password: "",
+    confirmPassword: "",
   });
-
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  function setField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
+    setError("");
+
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    if (form.password.length < 8) {
+      setError("Use at least 8 characters for your password.");
+      return;
+    }
+
     setLoading(true);
-    setMessage("");
 
     try {
       const supabase = createClient();
-
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: form.email.trim(),
         password: form.password,
         options: {
           data: {
             full_name: form.fullName.trim(),
           },
-          emailRedirectTo: `${window.location.origin}/dashboard`,
         },
       });
 
-      if (error) {
-        throw error;
-      }
-
-      if (!data.session) {
-        setMessage(
-          "Account created. Check your email to verify your account."
-        );
-        return;
-      }
+      if (error) throw error;
 
       router.push("/onboarding");
       router.refresh();
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to create account."
-      );
+      setError(error?.message || "Unable to create your account.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
-      <div className="mx-auto max-w-md rounded-3xl border border-white/10 bg-white/5 p-8">
-        <p className="text-sm font-semibold text-blue-300">
-          PHONIQ
-        </p>
+    <main className="min-h-screen bg-[#f5f7fb] px-5 py-10">
+      <div className="mx-auto grid min-h-[calc(100vh-80px)] max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_.95fr]">
+        <section className="phoniq-card p-7 sm:p-10">
+          <Link href="/" className="inline-flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-[14px] bg-blue-600 font-extrabold text-white">
+              P
+            </div>
+            <span className="text-lg font-extrabold text-slate-950">PHONIQ</span>
+          </Link>
 
-        <h1 className="mt-2 text-3xl font-bold">
-          Create your account
-        </h1>
+          <div className="mt-9 text-[11px] font-extrabold uppercase tracking-[.13em] text-blue-600">
+            Create workspace
+          </div>
 
-        <p className="mt-2 text-sm text-slate-400">
-          Set up your secure company workspace.
-        </p>
+          <h1 className="mt-3 text-4xl font-[850] tracking-[-.045em] text-slate-950">
+            Start your Phoniq account
+          </h1>
 
-        <form
-          onSubmit={handleSubmit}
-          className="mt-8 space-y-5"
-        >
-          <Field
-            label="Full name"
-            type="text"
-            value={form.fullName}
-            onChange={(value) =>
-              setForm((current) => ({
-                ...current,
-                fullName: value,
-              }))
-            }
-          />
-
-          <Field
-            label="Work email"
-            type="email"
-            value={form.email}
-            onChange={(value) =>
-              setForm((current) => ({
-                ...current,
-                email: value,
-              }))
-            }
-          />
-
-          <Field
-            label="Password"
-            type="password"
-            value={form.password}
-            onChange={(value) =>
-              setForm((current) => ({
-                ...current,
-                password: value,
-              }))
-            }
-          />
-
-          <button
-            disabled={loading}
-            className="w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold hover:bg-blue-700 disabled:opacity-60"
-          >
-            {loading ? "Creating account..." : "Create account"}
-          </button>
-        </form>
-
-        {message && (
-          <p className="mt-5 rounded-xl bg-white/10 p-4 text-sm">
-            {message}
+          <p className="mt-3 text-sm leading-7 text-slate-600">
+            Create your login first. The next screen will configure your
+            company, AI agent, service workflow, and website chat.
           </p>
-        )}
+
+          <form onSubmit={handleSubmit} className="mt-8 grid gap-5 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="mb-2 block text-xs font-extrabold text-slate-700">
+                Full name
+              </span>
+              <input
+                required
+                value={form.fullName}
+                onChange={(event) => setField("fullName", event.target.value)}
+                className="phoniq-input"
+                placeholder="Your full name"
+              />
+            </label>
+
+            <label className="block sm:col-span-2">
+              <span className="mb-2 block text-xs font-extrabold text-slate-700">
+                Work email
+              </span>
+              <input
+                required
+                type="email"
+                value={form.email}
+                onChange={(event) => setField("email", event.target.value)}
+                className="phoniq-input"
+                placeholder="you@company.com"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-xs font-extrabold text-slate-700">
+                Password
+              </span>
+              <input
+                required
+                type="password"
+                value={form.password}
+                onChange={(event) => setField("password", event.target.value)}
+                className="phoniq-input"
+                placeholder="8+ characters"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-xs font-extrabold text-slate-700">
+                Confirm password
+              </span>
+              <input
+                required
+                type="password"
+                value={form.confirmPassword}
+                onChange={(event) => setField("confirmPassword", event.target.value)}
+                className="phoniq-input"
+                placeholder="Repeat password"
+              />
+            </label>
+
+            {error && (
+              <div className="sm:col-span-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {error}
+              </div>
+            )}
+
+            <button
+              disabled={loading}
+              className="phoniq-button-primary sm:col-span-2 w-full !min-h-[48px] !text-white "
+            >
+              {loading ? "Creating account..." : "Create account"}
+            </button>
+          </form>
+
+          <div className="mt-7 rounded-2xl bg-slate-50 px-4 py-4 text-center text-sm text-slate-600">
+            Already have a Phoniq account?{" "}
+            <Link href="/login" className="font-extrabold text-blue-600">
+              Sign in
+            </Link>
+          </div>
+        </section>
+
+        <section className="hidden lg:block">
+          <div className="rounded-[30px] bg-gradient-to-br from-blue-600 to-indigo-700 p-10 text-white shadow-2xl">
+            <div className="text-[11px] font-extrabold uppercase tracking-[.14em] text-blue-100">
+              Setup takes minutes
+            </div>
+            <h2 className="mt-5 text-4xl font-[850] tracking-[-.045em]">
+              Build your AI front desk and CRM around your business.
+            </h2>
+            <div className="mt-7 space-y-4 text-sm text-blue-50">
+              <div>✓ Add company and service-area information</div>
+              <div>✓ Configure AI greeting and escalation preferences</div>
+              <div>✓ Set notification and WhatsApp preferences</div>
+              <div>✓ Generate a website chat widget for lead capture</div>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
-  );
-}
-
-function Field({
-  label,
-  type,
-  value,
-  onChange,
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-sm text-slate-300">
-        {label}
-      </span>
-
-      <input
-        required
-        type={type}
-        value={value}
-        minLength={type === "password" ? 10 : undefined}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 outline-none focus:border-blue-500"
-      />
-    </label>
   );
 }
