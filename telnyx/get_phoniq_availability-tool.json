@@ -1,0 +1,9 @@
+{
+    "name": "get_phoniq_availability",
+    "description": "Returns real Phoniq appointment times for the company being called.",
+    "method": "POST",
+    "url": "https://phoniq-platform.vercel.app/api/telnyx/availability",
+    "headers": {"Content-Type":"application/json","x-phoniq-tool-secret":"USE_THE_SAME_SECRET_AS_CREATE_PHONIQ_LEAD"},
+    "body": {"called_phone":"BUSINESS_NUMBER_IN_E164","requested_date":"YYYY-MM-DD"}
+  }
+  
