@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAvailableSlots } from '@/lib/appointments/getAvailableSlots';
+import crypto from 'crypto';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function phone(v) {
@@ -46,6 +48,42 @@ function isAuthorized(request) {
 export async function POST(request) {
   try {
     if (!isAuthorized(request)) {
+      const rawExpected =
+        process.env.PHONIQ_TELNYX_TOOL_SECRET ||
+        process.env.TELNYX_TOOL_SECRET ||
+        '';
+
+      const rawReceived =
+        request.headers.get('x-phoniq-tool-secret') || '';
+
+      const normalizedExpected =
+        normalizeToolSecret(rawExpected);
+
+      const normalizedReceived =
+        normalizeToolSecret(rawReceived);
+
+      const fingerprint = (value) =>
+        crypto
+          .createHash('sha256')
+          .update(value)
+          .digest('hex')
+          .slice(0, 12);
+
+      console.log('PHONIQ AUTH SAFE DEBUG', {
+        rawExpectedLength: rawExpected.length,
+        normalizedExpectedLength:
+          normalizedExpected.length,
+        rawReceivedLength: rawReceived.length,
+        normalizedReceivedLength:
+          normalizedReceived.length,
+        matches:
+          normalizedExpected === normalizedReceived,
+        expectedFingerprint:
+          fingerprint(normalizedExpected),
+        receivedFingerprint:
+          fingerprint(normalizedReceived),
+      });
+
       return NextResponse.json(
         {
           success: false,
@@ -97,7 +135,8 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error: 'No organization is mapped to this business phone.',
+          error:
+            'No organization is mapped to this business phone.',
         },
         { status: 404 }
       );
@@ -127,12 +166,17 @@ export async function POST(request) {
       })),
     });
   } catch (e) {
-    console.error('TELNYX AVAILABILITY ERROR', e);
+    console.error(
+      'TELNYX AVAILABILITY ERROR',
+      e
+    );
 
     return NextResponse.json(
       {
         success: false,
-        error: e?.message || 'Unable to check availability.',
+        error:
+          e?.message ||
+          'Unable to check availability.',
       },
       { status: 500 }
     );
