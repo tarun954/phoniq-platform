@@ -13,34 +13,45 @@ function phone(v) {
   return String(v || '');
 }
 
+function normalizeToolSecret(value) {
+  const secret = String(value || '').trim();
+
+  if (
+    (secret.startsWith('"') && secret.endsWith('"')) ||
+    (secret.startsWith("'") && secret.endsWith("'"))
+  ) {
+    return secret.slice(1, -1);
+  }
+
+  return secret;
+}
+
+function isAuthorized(request) {
+  const expectedSecret = normalizeToolSecret(
+    process.env.PHONIQ_TELNYX_TOOL_SECRET ||
+      process.env.TELNYX_TOOL_SECRET
+  );
+
+  const receivedSecret = normalizeToolSecret(
+    request.headers.get('x-phoniq-tool-secret')
+  );
+
+  return Boolean(
+    expectedSecret &&
+      receivedSecret &&
+      receivedSecret === expectedSecret
+  );
+}
+
 export async function POST(request) {
   try {
-    const phoniqSecret = process.env.PHONIQ_TELNYX_TOOL_SECRET;
-    const fallbackSecret = process.env.TELNYX_TOOL_SECRET;
-
-    const secret = phoniqSecret || fallbackSecret;
-
-    const receivedSecret =
-      request.headers.get('x-phoniq-tool-secret');
-
-    console.log('PHONIQ TOOL AUTH DEBUG', {
-      phoniqSecretConfigured: !!phoniqSecret,
-      fallbackSecretConfigured: !!fallbackSecret,
-      expectedLength: secret?.length ?? 0,
-      headerReceived: !!receivedSecret,
-      receivedLength: receivedSecret?.length ?? 0,
-      matches: receivedSecret === secret,
-    });
-
-    if (secret && receivedSecret !== secret) {
+    if (!isAuthorized(request)) {
       return NextResponse.json(
         {
           success: false,
           error: 'Unauthorized tool request.',
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
@@ -68,37 +79,27 @@ export async function POST(request) {
           error:
             'called_phone and requested_date (YYYY-MM-DD) are required.',
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
     const admin = createAdminClient();
 
-    const {
-      data: row,
-      error,
-    } = await admin
+    const { data: row, error } = await admin
       .from('phone_numbers')
       .select('organization_id,phone_number')
       .eq('phone_number', calledPhone)
       .maybeSingle();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     if (!row?.organization_id) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            'No organization is mapped to this business phone.',
+          error: 'No organization is mapped to this business phone.',
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
 
@@ -126,21 +127,14 @@ export async function POST(request) {
       })),
     });
   } catch (e) {
-    console.error(
-      'TELNYX AVAILABILITY ERROR',
-      e
-    );
+    console.error('TELNYX AVAILABILITY ERROR', e);
 
     return NextResponse.json(
       {
         success: false,
-        error:
-          e?.message ||
-          'Unable to check availability.',
+        error: e?.message || 'Unable to check availability.',
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

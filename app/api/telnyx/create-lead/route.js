@@ -161,6 +161,20 @@ function normalizePhone(value) {
   return "";
 }
 
+
+function normalizeToolSecret(value) {
+  const secret = String(value || "").trim();
+
+  if (
+    (secret.startsWith('"') && secret.endsWith('"')) ||
+    (secret.startsWith("'") && secret.endsWith("'"))
+  ) {
+    return secret.slice(1, -1);
+  }
+
+  return secret;
+}
+
 function determinePriority(emergency, issue) {
   const text = String(issue || "").toLowerCase();
 
@@ -210,12 +224,14 @@ export async function POST(request) {
      * --------------------------------------------------
      */
 
-    const receivedSecret = request.headers.get(
-      "x-phoniq-tool-secret"
+    const receivedSecret = normalizeToolSecret(
+      request.headers.get("x-phoniq-tool-secret")
     );
 
-    const expectedSecret =
-      process.env.PHONIQ_TELNYX_TOOL_SECRET;
+    const expectedSecret = normalizeToolSecret(
+      process.env.PHONIQ_TELNYX_TOOL_SECRET ||
+        process.env.TELNYX_TOOL_SECRET
+    );
 
     if (
       !expectedSecret ||

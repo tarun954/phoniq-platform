@@ -8,21 +8,42 @@ export const dynamic = "force-dynamic";
 function normalizePhone(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
+
   const digits = raw.replace(/\D/g, "");
+
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+
   return raw.startsWith("+") ? raw : `+${digits}`;
 }
 
+function normalizeToolSecret(value) {
+  const secret = String(value || "").trim();
+
+  if (
+    (secret.startsWith('"') && secret.endsWith('"')) ||
+    (secret.startsWith("'") && secret.endsWith("'"))
+  ) {
+    return secret.slice(1, -1);
+  }
+
+  return secret;
+}
+
 function isAuthorized(request) {
-  const expected =
+  const expectedSecret = normalizeToolSecret(
     process.env.PHONIQ_TELNYX_TOOL_SECRET ||
-    process.env.TELNYX_TOOL_SECRET;
+      process.env.TELNYX_TOOL_SECRET
+  );
 
-  if (!expected) return true;
+  const receivedSecret = normalizeToolSecret(
+    request.headers.get("x-phoniq-tool-secret")
+  );
 
-  return (
-    request.headers.get("x-phoniq-tool-secret") === expected
+  return Boolean(
+    expectedSecret &&
+      receivedSecret &&
+      receivedSecret === expectedSecret
   );
 }
 
