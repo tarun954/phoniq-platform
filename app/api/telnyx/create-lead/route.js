@@ -161,6 +161,20 @@ function normalizePhone(value) {
   return "";
 }
 
+
+function normalizeToolSecret(value) {
+  const secret = String(value || "").trim();
+
+  if (
+    (secret.startsWith('"') && secret.endsWith('"')) ||
+    (secret.startsWith("'") && secret.endsWith("'"))
+  ) {
+    return secret.slice(1, -1);
+  }
+
+  return secret;
+}
+
 function determinePriority(emergency, issue) {
   const text = String(issue || "").toLowerCase();
 
@@ -210,12 +224,14 @@ export async function POST(request) {
      * --------------------------------------------------
      */
 
-    const receivedSecret = request.headers.get(
-      "x-phoniq-tool-secret"
+    const receivedSecret = normalizeToolSecret(
+      request.headers.get("x-phoniq-tool-secret")
     );
 
-    const expectedSecret =
-      process.env.PHONIQ_TELNYX_TOOL_SECRET;
+    const expectedSecret = normalizeToolSecret(
+      process.env.PHONIQ_TELNYX_TOOL_SECRET ||
+        process.env.TELNYX_TOOL_SECRET
+    );
 
     if (
       !expectedSecret ||
@@ -458,7 +474,7 @@ export async function POST(request) {
     let customer;
 
     const {
-      data: existingCustomer,
+      data: customerMatches,
       error: existingCustomerError,
     } = await admin
       .from("customers")
@@ -471,17 +487,49 @@ export async function POST(request) {
         "phone",
         callerPhone
       )
-      .maybeSingle();
-
+      .order(
+        "created_at",
+        {
+          ascending: true,
+        }
+      )
+      .limit(2);
+    
     if (existingCustomerError) {
       console.error(
         "CUSTOMER LOOKUP ERROR:",
         existingCustomerError
       );
-
+    
       throw existingCustomerError;
     }
-
+    
+    /*
+     * Never allow duplicate customer rows
+     * to crash a live Telnyx call.
+     *
+     * We use the oldest matching customer
+     * as the canonical customer.
+     */
+    const existingCustomer =
+      customerMatches?.[0] || null;
+    
+    if (
+      customerMatches &&
+      customerMatches.length > 1
+    ) {
+      console.warn(
+        "DUPLICATE CUSTOMER MATCHES DETECTED:",
+        {
+          organizationId,
+          callerPhone,
+          customerIds:
+            customerMatches.map(
+              (record) => record.id
+            ),
+        }
+      );
+    }
     if (existingCustomer) {
       const {
         data: updatedCustomer,

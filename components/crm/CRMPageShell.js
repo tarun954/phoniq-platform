@@ -18,7 +18,9 @@ export default function CRMPageShell({
         <div className="crm-page-heading">
           <div className="crm-page-heading-copy">
             {eyebrow && <p className="crm-page-eyebrow">{eyebrow}</p>}
+
             {title && <h1 className="crm-page-title">{title}</h1>}
+
             {description && (
               <p className="crm-page-description">{description}</p>
             )}
@@ -39,10 +41,12 @@ export default function CRMPageShell({
           margin: 0 0 24px !important;
           padding: 0 !important;
           min-height: 0 !important;
+          min-width: 0;
         }
 
         .crm-page-heading-copy {
           min-width: 0;
+          flex: 1 1 auto;
         }
 
         .crm-page-eyebrow {
@@ -61,6 +65,7 @@ export default function CRMPageShell({
           line-height: 1.12;
           font-weight: 800;
           letter-spacing: -0.7px;
+          overflow-wrap: anywhere;
         }
 
         .crm-page-description {
@@ -68,27 +73,43 @@ export default function CRMPageShell({
           color: #64748b;
           font-size: 15px;
           line-height: 1.55;
+          max-width: 760px;
+        }
+
+        .crm-page-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          flex: 0 0 auto;
         }
 
         @media (max-width: 800px) {
           .crm-page-heading {
             flex-direction: column;
+            gap: 14px;
           }
 
           .crm-page-title {
             font-size: 32px;
+          }
+
+          .crm-page-actions {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .crm-page-title {
+            font-size: 28px;
           }
         }
       `}</style>
     </>
   );
 
-  // If a route layout already mounted the client chrome, render only page content.
   if (insideClientChrome) {
     return content;
   }
 
-  // The four legacy routes use pass-through layouts; their page-level
-  // CRMPageShell mounts the single shell here.
   return <ClientRouteShell>{content}</ClientRouteShell>;
 }
